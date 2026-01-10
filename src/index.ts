@@ -1,4 +1,3 @@
-
 import express from 'express';
 import cors from 'cors';
 import { fetchAllFeeds, FEEDS_COUNT } from './parser';
@@ -71,8 +70,9 @@ app.get('/api/news/latest', (req, res) => {
     res.json(latest);
 });
 
+
 app.listen(PORT, () => {
-    console.log(`GlobalNews Backend running at http://localhost:${PORT}`);
+    console.log(`GlobalNews Backend running at port ${PORT}`);
     console.log(`Monitoring ${FEEDS_COUNT} RSS feeds for real-time intelligence.`);
 });
 
