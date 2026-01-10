@@ -55,6 +55,7 @@ app.get('/api/news/latest', (req, res) => {
     res.json(latest);
 });
 app.listen(PORT, () => {
-    console.log(`GlobalNews Backend running at http://localhost:${PORT}`);
+    console.log(`GlobalNews Backend running at port ${PORT}`);
     console.log(`Monitoring ${parser_1.FEEDS_COUNT} RSS feeds for real-time intelligence.`);
 });
+
