@@ -94,8 +94,10 @@ export const FEEDS: FeedConfig[] = [
     { name: 'Jakarta Post', url: 'https://news.google.com/rss/search?q=site:thejakartapost.com+when:24h&hl=en-ID&gl=ID&ceid=ID:en', country: 'Indonesia', region: 'Asia-Pacific', language: 'English' },
 
     // India
+    { name: 'India News', url: 'https://news.google.com/rss/search?q=India+when:24h&hl=en-IN&gl=IN&ceid=IN:en', country: 'India', region: 'Asia-Pacific', language: 'English' },
+    { name: 'NDTV (India)', url: 'https://news.google.com/rss/search?q=site:ndtv.com+when:24h&hl=en-IN&gl=IN&ceid=IN:en', country: 'India', region: 'Asia-Pacific', language: 'English' },
+    { name: 'Times of India', url: 'https://news.google.com/rss/search?q=site:timesofindia.indiatimes.com+when:24h&hl=en-IN&gl=IN&ceid=IN:en', country: 'India', region: 'Asia-Pacific', language: 'English' },
     { name: 'Reuters (India)', url: 'https://news.google.com/rss/search?q=when:24h+source:Reuters&hl=en-IN&gl=IN&ceid=IN:en', country: 'India', region: 'Asia-Pacific', language: 'English' },
-    { name: 'The Hindu', url: 'https://news.google.com/rss/search?q=site:thehindu.com+when:24h&hl=en-IN&gl=IN&ceid=IN:en', country: 'India', region: 'Asia-Pacific', language: 'English' },
 
     // Pakistan
     { name: 'Dawn', url: 'https://www.dawn.com/feeds/home', country: 'Pakistan', region: 'Asia-Pacific', language: 'English' },
