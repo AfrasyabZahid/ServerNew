@@ -39,4 +39,3 @@ async function checkAllFeeds() {
     console.log(`\n📊 RESULTS: ${successCount} Working / ${failCount} Failed`);
 }
 checkAllFeeds();
-
