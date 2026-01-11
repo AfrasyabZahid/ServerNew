@@ -8,7 +8,7 @@ const crypto_1 = __importDefault(require("crypto"));
 const REGIONS = ['Americas', 'Europe', 'Asia-Pacific', 'Middle East', 'Africa'];
 const COUNTRY_MAP = {
     // Americas
-    'USA': ['USA', 'United States', 'Washington', 'Biden', 'Pentagon', 'Congress', 'White House'],
+    'USA': ['USA', 'United States', 'Washington', 'Trump', 'Pentagon', 'Congress', 'White House'],
     'Venezuela': ['Venezuela', 'Caracas', 'Maduro'],
     'Colombia': ['Colombia', 'Bogota', 'Petro'],
     'Brazil': ['Brazil', 'Brasilia', 'Lula'],
@@ -39,7 +39,7 @@ const COUNTRY_MAP = {
     'Ethiopia': ['Ethiopia', 'Addis Ababa', 'Abiy Ahmed'],
     // South Asia
     'India': ['India', 'New Delhi', 'Modi'],
-    'Pakistan': ['Pakistan', 'Islamabad', 'Sharif', 'Dawn']
+    'Pakistan': ['Pakistan', 'Islamabad', 'Sharif', 'Dawn','Khan','Imran']
 };
 const ALERT_KEYWORDS = {
     CRITICAL: ['nuclear', 'missile', 'invasion', 'declaration of war', 'coup', 'assassination', 'cyber attack', 'blackout'],
