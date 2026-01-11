@@ -65,9 +65,10 @@ const COUNTRY_MAP: Record<string, string[]> = {
 };
 
 const ALERT_KEYWORDS = {
-    CRITICAL: ['nuclear', 'missile', 'invasion', 'declaration of war', 'coup', 'assassination', 'cyber attack', 'blackout'],
-    HIGH: ['sanctions', 'embargo', 'ultimatum', 'deployment', 'skirmish', 'terrorism', 'emergency'],
-    MEDIUM: ['summit', 'treaty', 'alliance', 'agreement', 'protest', 'unrest', 'diplomatic row']
+    EXTREME: ['war', 'attack', 'explosion', 'tsunami', 'earthquake', 'terror', 'bombing', 'siege', 'invasion', 'airstrike'],
+    CRITICAL: ['nuclear', 'missile', 'coup', 'assassination', 'cyber attack', 'blackout', 'mobilization', 'martial law'],
+    HIGH: ['sanctions', 'embargo', 'ultimatum', 'deployment', 'skirmish', 'emergency', 'casualty', 'hostage'],
+    MEDIUM: ['summit', 'treaty', 'alliance', 'agreement', 'protest', 'unrest', 'diplomatic row', 'scandal']
 };
 
 export const processNewsItem = async (item: RawNewsItem): Promise<IntelligenceSignal> => {
@@ -87,9 +88,16 @@ export const processNewsItem = async (item: RawNewsItem): Promise<IntelligenceSi
 
     // AI IMPACT METHODOLOGY: Weighted Keyword Analysis
     let impactScore = 0;
+
+    // 1. Keyword Scanning
+    ALERT_KEYWORDS.EXTREME.forEach(kw => { if (text.includes(kw)) impactScore += 0.8; });
     ALERT_KEYWORDS.CRITICAL.forEach(kw => { if (text.includes(kw)) impactScore += 0.5; });
     ALERT_KEYWORDS.HIGH.forEach(kw => { if (text.includes(kw)) impactScore += 0.3; });
     ALERT_KEYWORDS.MEDIUM.forEach(kw => { if (text.includes(kw)) impactScore += 0.1; });
+
+    // 2. Intensity Multiplier (Title Only)
+    if (title.includes('URGENT') || title.includes('LIVE') || title.includes('BREAKING')) impactScore += 0.3;
+    if (title.includes('!') || title.toUpperCase() === title) impactScore += 0.1;
 
     impactScore = Math.min(impactScore, 1.0);
 
@@ -100,10 +108,34 @@ export const processNewsItem = async (item: RawNewsItem): Promise<IntelligenceSi
 
     // Classify impact
     let impactCategory: 'breaking' | 'alert' | 'general' = 'general';
-    if (impactScore >= 0.7 || title.toLowerCase().includes('breaking')) impactCategory = 'breaking';
-    else if (impactScore >= 0.3) impactCategory = 'alert';
+    // STRICTER THRESHOLD: Must be 0.8+ for Breaking (Intensity Check)
+    if (impactScore >= 0.8) impactCategory = 'breaking';
+    else if (impactScore >= 0.4) impactCategory = 'alert';
 
     const isBreaking = impactCategory === 'breaking';
+
+    // AI CLASSIFICATION: Re-validate Country based on Content
+    // Rules:
+    // 1. If text mentions specific global entities (Prince Harry, Biden, etc.), override the country.
+    // 2. This prevents "The News International (PK)" from mislabeling a UK story as "Pakistan".
+    let finalCountry = item.country;
+
+    // Explicit exclusions to prevent over-correction
+    const manualOverrides: Record<string, string> = {
+        'Prince Harry': 'UK', 'London': 'UK', 'King Charles': 'UK', 'Rishi Sunak': 'UK',
+        'Biden': 'USA', 'Trump': 'USA', 'White House': 'USA', 'Pentagon': 'USA',
+        'Putin': 'Russia', 'Moscow': 'Russia', 'Kremlin': 'Russia',
+        'Netanyahu': 'Israel', 'Gaza': 'Israel', 'IDF': 'Israel',
+        'Zelensky': 'Ukraine', 'Kyiv': 'Ukraine',
+        'Macron': 'France', 'Paris': 'France'
+    };
+
+    for (const [key, country] of Object.entries(manualOverrides)) {
+        if (text.includes(key.toLowerCase())) {
+            finalCountry = country;
+            break; // Strongest match wins
+        }
+    }
 
     return {
         id,
@@ -112,7 +144,7 @@ export const processNewsItem = async (item: RawNewsItem): Promise<IntelligenceSi
         originalText: item.content,
         translatedText: translatedTitle,
         language: language,
-        country: item.country,
+        country: finalCountry, // <--- UPDATED (Content > Source)
         region: item.region,
         topic: convergenceScore > 0.4 ? 'Foreign Policy' : 'General',
         convergenceScore,
