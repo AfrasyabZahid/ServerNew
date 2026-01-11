@@ -14,6 +14,7 @@ app.use(express_1.default.json());
 let processedSignals = [];
 // Background worker to fetch and process news
 const updateNewsBuffer = async () => {
+    console.log('--- RELOADING WITH 5000 LIMIT ---');
     console.log(`[${new Date().toLocaleTimeString()}] Fetching news from ${parser_1.FEEDS_COUNT} global sources...`);
     const rawItems = await (0, parser_1.fetchAllFeeds)();
     console.log(`[STATUS] Raw items fetched: ${rawItems.length}`);
@@ -21,55 +22,49 @@ const updateNewsBuffer = async () => {
         console.warn("[WARN] No raw items fetched. Check feed configurations or network.");
         return;
     }
-    // FAIR SHARE REGIONAL PROCESSING LOGIC
-    const itemsByCountry = {};
-    rawItems.forEach(item => {
-        if (!itemsByCountry[item.country])
-            itemsByCountry[item.country] = [];
-        itemsByCountry[item.country].push(item);
-    });
-    const prioritizedItems = [];
-    const remainingItems = [];
-    // Phase 1: Take up to 40 items from every country to ensure diversity
-    Object.values(itemsByCountry).forEach(countryItems => {
-        const shuffled = countryItems.sort(() => Math.random() - 0.5);
-        prioritizedItems.push(...shuffled.slice(0, 40));
-        remainingItems.push(...shuffled.slice(40));
-    });
-    // Phase 2: Fill the rest of the buffer with remaining items (shuffled)
-    const finalRawItems = [
-        ...prioritizedItems,
-        ...remainingItems.sort(() => Math.random() - 0.5)
-    ].slice(0, 2000);
-    console.log(`[STATUS] Fair-Share selection complete. Processing ${finalRawItems.length} items.`);
-    const newSignals = await Promise.all(finalRawItems.map(item => (0, processor_1.processNewsItem)(item)));
+    const newSignals = await Promise.all(rawItems.map(item => (0, processor_1.processNewsItem)(item)) // NO LIMIT: Process everything
+    );
     console.log(`[STATUS] Processed new signals: ${newSignals.length}`);
     // Keep unique signals based on ID and normalized title (for cross-source deduplication)
     const merged = [...newSignals, ...processedSignals];
-    // Advanced deduplication: By ID (link) AND by normalized Title
+    // Advanced deduplication: By ID (link), Normalized Title, AND Country Quota
     const seenTitles = new Set();
     const seenIds = new Set();
+    const countryCounts = {}; // Track items per country
     processedSignals = merged.filter((signal) => {
-        // More specific normalization to avoid collisions
         const normalizedTitle = signal.translatedText.toLowerCase()
-            .replace(/[^a-z0-9]/g, '')
-            .substring(0, 150);
-        if (seenIds.has(signal.id) || seenTitles.has(normalizedTitle)) {
+            .replace(/[^a-z0-9]/g, '') // Remove special characters
+            .substring(0, 100); // Compare first 100 chars
+        // Check Country Quota (Target 170 per country)
+        const currentCountryCount = countryCounts[signal.country] || 0;
+        // --- MINIMUM THRESHOLD LOGIC (Target 30) ---
+        // If a country has < 30 items, we RELAX the deduplication.
+        // We only check for exact ID matches, ignoring "similar title" checks.
+        // This ensures we squeeze every possible signal out of low-volume sources.
+        const isLowVolume = currentCountryCount < 30;
+        // Check Duplicates
+        // 1. Exact ID Match (Always reject exact duplicates)
+        if (seenIds.has(signal.id)) {
             return false;
         }
+        // 2. Fuzzy Title Match (Skip this if we are desperate for content)
+        if (!isLowVolume && seenTitles.has(normalizedTitle)) {
+            return false;
+        }
+        if (currentCountryCount >= 170) {
+            return false; // Skip if quota exceeded to save space for others
+        }
+        // Approve Signal
+        countryCounts[signal.country] = currentCountryCount + 1;
         seenIds.add(signal.id);
         seenTitles.add(normalizedTitle);
         return true;
-    }).slice(0, 1500);
-    // LOG REGIONAL DIVERSITY STATUS
-    const countryStats = {};
-    processedSignals.forEach(s => {
-        countryStats[s.country] = (countryStats[s.country] || 0) + 1;
-    });
-    console.log(`[STATUS] Regional Diversity Audit (Live Buffer):`);
-    Object.entries(countryStats)
-        .sort((a, b) => b[1] - a[1])
-        .forEach(([c, n]) => console.log(` - ${c.padEnd(15)}: ${n}`));
+    }).slice(0, 10000); // Massive buffer to hold 30d history for all countries
+    // --- DEBUG: LOG COUNTS PER COUNTRY ---
+    const counts = {};
+    processedSignals.forEach(s => { counts[s.country] = (counts[s.country] || 0) + 1; });
+    console.log('[DEBUG] Final Buffer Counts:', JSON.stringify(counts, null, 2));
+    // -------------------------------------
     console.log(`[${new Date().toLocaleTimeString()}] Buffer updated. Total unique signals: ${processedSignals.length}`);
 };
 // Initial fetch and sequential polling
