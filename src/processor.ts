@@ -22,7 +22,12 @@ export interface IntelligenceSignal {
     timestamp: string;
 }
 
-const { translate } = require('bing-translate-api');
+// ------------------------------------------------------------------
+// CONFIGURATION
+// ------------------------------------------------------------------
+// PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE:
+const TRANSLATION_PROXY_URL = "https://script.google.com/macros/s/AKfycbyCj4-N9LXPqUJ5o22utKytLevucg7GvPVMaMqwWBJfBCQYq30GVGO_WRF7vq9T8VaZOw/exec";
+// ------------------------------------------------------------------
 
 const REGIONS = ['Americas', 'Europe', 'Asia-Pacific', 'Middle East', 'Africa'];
 
@@ -34,6 +39,7 @@ const COUNTRY_MAP: Record<string, string[]> = {
     'Brazil': ['Brazil', 'Brasilia', 'Lula'],
     'Mexico': ['Mexico', 'Obrador', 'Morena'],
     'Canada': ['Canada', 'Ottawa', 'Trudeau', 'CBC'],
+    'Greenland': ['Greenland', 'Nuuk', 'Denmark', 'Arctic'], // Added Manual Override
 
     // East Asia & Pacific
     'China': ['China', 'Beijing', 'Xi Jinping', 'Taiwan', 'Shanghai', 'CCP', 'PLA'],
@@ -49,6 +55,7 @@ const COUNTRY_MAP: Record<string, string[]> = {
     'Saudi Arabia': ['Saudi Arabia', 'Riyadh', 'MBS', 'Bin Salman'],
     'Turkey': ['Turkey', 'Ankara', 'Erdogan'],
     'Egypt': ['Egypt', 'Cairo', 'Al-Sisi'],
+    'Qatar': ['Qatar', 'Doha', 'Al Jazeera'],
 
     // Europe
     'Russia': ['Russia', 'Moscow', 'Putin', 'Kremlin', 'Wagner'],
@@ -90,13 +97,31 @@ export const processNewsItem = async (item: RawNewsItem): Promise<IntelligenceSi
 
     if (language !== 'English') {
         try {
-            const res = await translate(title, null, 'en');
-            if (res && res.translation && res.translation !== title) {
-                translatedTitle = res.translation;
-                isTranslated = true;
+            if (TRANSLATION_PROXY_URL && TRANSLATION_PROXY_URL.startsWith('http')) {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 sec timeout
+
+                const response = await fetch(TRANSLATION_PROXY_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: title, source: '', target: 'en' }),
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+
+                if (response.ok) {
+                    const data: any = await response.json();
+                    if (data && data.translation) {
+                        translatedTitle = data.translation;
+                        isTranslated = true;
+                    }
+                }
+            } else {
+                // Fallback or warning if no URL configured
+                // console.warn('No Translation Proxy URL configured. Skipping translation.');
             }
         } catch (err) {
-            console.error(`Translation failed (Bing) for: ${title}`, err);
+            console.error(`Translation Proxy failed for: ${title}`, err);
             translatedTitle = title;
         }
     }
