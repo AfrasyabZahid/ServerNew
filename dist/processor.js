@@ -5,10 +5,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.processNewsItem = void 0;
 const crypto_1 = __importDefault(require("crypto"));
+const { translate } = require('bing-translate-api');
 const REGIONS = ['Americas', 'Europe', 'Asia-Pacific', 'Middle East', 'Africa'];
 const COUNTRY_MAP = {
     // Americas
-    'USA': ['USA', 'United States', 'Washington', 'Trump', 'Pentagon', 'Congress', 'White House'],
+    'USA': ['USA', 'United States', 'Washington', 'Biden', 'Pentagon', 'Congress', 'White House'],
     'Venezuela': ['Venezuela', 'Caracas', 'Maduro'],
     'Colombia': ['Colombia', 'Bogota', 'Petro'],
     'Brazil': ['Brazil', 'Brasilia', 'Lula'],
@@ -39,45 +40,98 @@ const COUNTRY_MAP = {
     'Ethiopia': ['Ethiopia', 'Addis Ababa', 'Abiy Ahmed'],
     // South Asia
     'India': ['India', 'New Delhi', 'Modi'],
-    'Pakistan': ['Pakistan', 'Islamabad', 'Sharif', 'Dawn','Khan','Imran']
+    'Pakistan': ['Pakistan', 'Islamabad', 'Sharif', 'Dawn']
 };
 const ALERT_KEYWORDS = {
-    CRITICAL: ['nuclear', 'missile', 'invasion', 'declaration of war', 'coup', 'assassination', 'cyber attack', 'blackout'],
-    HIGH: ['sanctions', 'embargo', 'ultimatum', 'deployment', 'skirmish', 'terrorism', 'emergency'],
-    MEDIUM: ['summit', 'treaty', 'alliance', 'agreement', 'protest', 'unrest', 'diplomatic row']
+    EXTREME: ['war', 'attack', 'explosion', 'tsunami', 'earthquake', 'terror', 'bombing', 'siege', 'invasion', 'airstrike', 'genocide', 'annexation', 'massacre'],
+    CRITICAL: ['nuclear', 'missile', 'coup', 'assassination', 'cyber attack', 'blackout', 'mobilization', 'martial law', 'threaten', 'threatens', 'threatening', 'missiles', 'warfare'],
+    HIGH: ['sanctions', 'embargo', 'ultimatum', 'deployment', 'skirmish', 'emergency', 'casualty', 'hostage', 'sovereignty', 'territorial', 'military', 'troops', 'conflict'],
+    MEDIUM: ['summit', 'treaty', 'alliance', 'agreement', 'protest', 'unrest', 'diplomatic row', 'scandal', 'visit', 'talks', 'delegation', 'lawmakers', 'senate', 'parliament']
 };
 const processNewsItem = async (item) => {
     const title = item.title;
     const content = item.content;
     const text = (title + ' ' + content).toLowerCase();
+    const titleLower = title.toLowerCase();
     // Stable ID based on the news link
     const id = `LOC-${crypto_1.default.createHash('md5').update(item.link).digest('hex').substring(0, 8).toUpperCase()}`;
     // Translation logic
     let translatedTitle = title;
+    let isTranslated = false;
     let language = item.language;
     if (language !== 'English') {
-        translatedTitle = `[TRANSLATED] ${title}`;
+        try {
+            const res = await translate(title, null, 'en');
+            if (res && res.translation && res.translation !== title) {
+                translatedTitle = res.translation;
+                isTranslated = true;
+            }
+        }
+        catch (err) {
+            console.error(`Translation failed (Bing) for: ${title}`, err);
+            translatedTitle = title;
+        }
     }
-    // AI IMPACT METHODOLOGY: Weighted Keyword Analysis
-    let impactScore = 0;
-    ALERT_KEYWORDS.CRITICAL.forEach(kw => { if (text.includes(kw))
+    // --- REFINED AI IMPACT METHODOLOGY ---
+    let impactScore = 0.05; // Base 5% impact for any global news signal
+    const translatedLower = translatedTitle.toLowerCase();
+    // 1. Title Priority Scanning (Double Weight - Scan Translated Text)
+    ALERT_KEYWORDS.EXTREME.forEach(kw => { if (translatedLower.includes(kw))
+        impactScore += 0.8; });
+    ALERT_KEYWORDS.CRITICAL.forEach(kw => { if (translatedLower.includes(kw))
         impactScore += 0.5; });
-    ALERT_KEYWORDS.HIGH.forEach(kw => { if (text.includes(kw))
+    ALERT_KEYWORDS.HIGH.forEach(kw => { if (translatedLower.includes(kw))
         impactScore += 0.3; });
-    ALERT_KEYWORDS.MEDIUM.forEach(kw => { if (text.includes(kw))
-        impactScore += 0.1; });
-    impactScore = Math.min(impactScore, 1.0);
+    ALERT_KEYWORDS.MEDIUM.forEach(kw => { if (translatedLower.includes(kw))
+        impactScore += 0.15; });
+    // 2. Content Secondary Scanning (Single Weight - Scan Original Content)
+    // Note: Keywords are in English, if content is not, this might miss unless translated.
+    // For now, we prioritize the Title which IS translated.
+    ALERT_KEYWORDS.EXTREME.forEach(kw => { if (!translatedLower.includes(kw) && text.includes(kw))
+        impactScore += 0.4; });
+    ALERT_KEYWORDS.CRITICAL.forEach(kw => { if (!translatedLower.includes(kw) && text.includes(kw))
+        impactScore += 0.25; });
+    ALERT_KEYWORDS.HIGH.forEach(kw => { if (!translatedLower.includes(kw) && text.includes(kw))
+        impactScore += 0.15; });
+    ALERT_KEYWORDS.MEDIUM.forEach(kw => { if (!translatedLower.includes(kw) && text.includes(kw))
+        impactScore += 0.05; });
+    // 3. Multipliers & Context
+    if (translatedTitle.includes('URGENT') || translatedTitle.includes('LIVE') || translatedTitle.includes('BREAKING'))
+        impactScore += 0.35;
+    if (translatedTitle.includes('!') || (translatedTitle.length > 20 && translatedTitle.toUpperCase() === translatedTitle))
+        impactScore += 0.1;
+    // Geographical Scale Multiplier
+    const globalTerms = ['world', 'global', 'un', 'international', 'nato', 'brics'];
+    globalTerms.forEach(term => { if (text.includes(term))
+        impactScore += 0.05; });
+    impactScore = Math.min(impactScore, 0.99); // Cap just below 100% for realism
     // Topic & Relevance
-    const policyKeywords = ['diplomacy', 'foreign policy', 'geopolitical', 'nato', 'un', 'asean', 'brics'];
+    const policyKeywords = ['diplomacy', 'foreign policy', 'geopolitical', 'nato', 'un', 'asean', 'brics', 'sovereignty', 'territory'];
     const policyCount = policyKeywords.filter(kw => text.includes(kw)).length;
     const convergenceScore = Math.min(policyCount / 2, 1.0);
     // Classify impact
     let impactCategory = 'general';
-    if (impactScore >= 0.7 || title.toLowerCase().includes('breaking'))
+    if (impactScore >= 0.75)
         impactCategory = 'breaking';
-    else if (impactScore >= 0.3)
+    else if (impactScore >= 0.35)
         impactCategory = 'alert';
     const isBreaking = impactCategory === 'breaking';
+    // AI CLASSIFICATION: Re-validate Country based on Content
+    let finalCountry = item.country;
+    const manualOverrides = {
+        'Prince Harry': 'UK', 'London': 'UK', 'King Charles': 'UK', 'Rishi Sunak': 'UK',
+        'Biden': 'USA', 'Trump': 'USA', 'White House': 'USA', 'Pentagon': 'USA',
+        'Putin': 'Russia', 'Moscow': 'Russia', 'Kremlin': 'Russia',
+        'Netanyahu': 'Israel', 'Gaza': 'Israel', 'IDF': 'Israel',
+        'Zelensky': 'Ukraine', 'Kyiv': 'Ukraine',
+        'Macron': 'France', 'Paris': 'France', 'Greenland': 'USA'
+    };
+    for (const [key, country] of Object.entries(manualOverrides)) {
+        if (text.includes(key.toLowerCase())) {
+            finalCountry = country;
+            break;
+        }
+    }
     return {
         id,
         source: item.source,
@@ -85,14 +139,15 @@ const processNewsItem = async (item) => {
         originalText: item.content,
         translatedText: translatedTitle,
         language: language,
-        country: item.country,
+        country: finalCountry,
         region: item.region,
-        topic: convergenceScore > 0.4 ? 'Foreign Policy' : 'General',
+        topic: (convergenceScore > 0.4 || impactScore > 0.5) ? 'Foreign Policy' : 'General',
         convergenceScore,
         velocityScore: Math.random(),
         impactScore,
         impactCategory,
         isBreaking,
+        isTranslated,
         confidence: 0.95,
         timestamp: item.pubDate
     };
