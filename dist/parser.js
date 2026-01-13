@@ -147,4 +147,3 @@ const fetchAllFeeds = async () => {
     return allItems.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
 };
 exports.fetchAllFeeds = fetchAllFeeds;
-
