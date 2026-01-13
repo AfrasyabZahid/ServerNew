@@ -22,9 +22,49 @@ const updateNewsBuffer = async () => {
         console.warn("[WARN] No raw items fetched. Check feed configurations or network.");
         return;
     }
-    const newSignals = await Promise.all(rawItems.map(item => (0, processor_1.processNewsItem)(item)) // NO LIMIT: Process everything
-    );
-    console.log(`[STATUS] Processed new signals: ${newSignals.length}`);
+    // 1. Deduplicate raw items by link
+    const uniqueRawItems = Array.from(new Map(rawItems.map(item => [item.link, item])).values());
+    // 2. Filter out items we already have in processedSignals
+    const existingLinks = new Set(processedSignals.map(s => s.sourceUrl));
+    const newRawItems = uniqueRawItems.filter(item => !existingLinks.has(item.link));
+    // 3. Fair Selection: Group new items by country and pick evenly
+    const itemsByCountry = {};
+    newRawItems.forEach(item => {
+        if (!itemsByCountry[item.country])
+            itemsByCountry[item.country] = [];
+        itemsByCountry[item.country].push(item);
+    });
+    const finalItemsToProcess = [];
+    const maxToProcess = 500; // Increased volume with Bing
+    let itemsAdded = 0;
+    let addedInLastPass = true;
+    let pass = 0;
+    while (itemsAdded < maxToProcess && addedInLastPass) {
+        addedInLastPass = false;
+        for (const country in itemsByCountry) {
+            if (itemsByCountry[country][pass]) {
+                finalItemsToProcess.push(itemsByCountry[country][pass]);
+                itemsAdded++;
+                addedInLastPass = true;
+                if (itemsAdded >= maxToProcess)
+                    break;
+            }
+        }
+        pass++;
+    }
+    console.log(`[STATUS] Fair Selection: Picked ${finalItemsToProcess.length} items to process.`);
+    // 4. Process items in batches
+    const newSignals = [];
+    const batchSize = 10; // Optimized batch size for Bing
+    for (let i = 0; i < finalItemsToProcess.length; i += batchSize) {
+        const batch = finalItemsToProcess.slice(i, i + batchSize);
+        console.log(`[PROCESS] Batch ${i / batchSize + 1} of ${Math.ceil(finalItemsToProcess.length / batchSize)} (Yield: ${newSignals.length})...`);
+        const results = await Promise.all(batch.map(item => (0, processor_1.processNewsItem)(item)));
+        newSignals.push(...results);
+        // Standard delay between batches
+        await new Promise(resolve => setTimeout(resolve, 600));
+    }
+    console.log(`[STATUS] Successfully processed ${newSignals.length} new signals.`);
     // Keep unique signals based on ID and normalized title (for cross-source deduplication)
     const merged = [...newSignals, ...processedSignals];
     // Advanced deduplication: By ID (link), Normalized Title, AND Country Quota
